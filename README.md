@@ -1,2 +1,2 @@
 # fzBurg
-An UEFI loader for fzOS.
+A UEFI loader for fzOS.
