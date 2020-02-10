@@ -1,0 +1,13 @@
+[Defines]
+ INF_VERSION = 0x00010005
+ BASE_NAME = FzBurgHelloWorld
+ FILE_GUID = 0CA4812E-1E5C-423F-B6EB-42A61DFFC9B0
+ MODULE_TYPE = UEFI_APPLICATION
+ VERSION_STRING = 0.01
+ ENTRY_POINT = UefiMain
+[Sources]
+  FzBurgHelloWorld.c
+[Packages]
+ MdePkg/MdePkg.dec
+[LibraryClasses]
+ UefiApplicationEntryPoint
