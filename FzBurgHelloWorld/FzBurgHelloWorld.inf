@@ -9,5 +9,9 @@
   FzBurgHelloWorld.c
 [Packages]
  MdePkg/MdePkg.dec
+[Protocols]  
+  gEfiGraphicsOutputProtocolGuid
+  gEfiSimpleFileSystemProtocolGuid
 [LibraryClasses]
- UefiApplicationEntryPoint
+  UefiApplicationEntryPoint
+  UefiLib
