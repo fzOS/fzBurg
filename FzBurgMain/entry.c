@@ -80,6 +80,11 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     EFI_MEMORY_DESCRIPTOR* MemMap = NULL;
     //首先，我们尝试一次以获得真实大小。
     Status  = gBS->GetMemoryMap(&MemSize,MemMap,NULL,&MemMapDescSize,NULL);
+    if(Status!=EFI_BUFFER_TOO_SMALL)
+    {
+        Print(L"Unknown error!\r\n");
+        return Status;
+    }
     //第一次必然会太小，返回真实的大小。
     Print(L"The real mem size is:%llu\r\n",MemSize);
     MemSize*=2;
@@ -89,16 +94,33 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
         Print(L"Cannot allocate mem for Memory map!\r\n");
         return Status;
     }
+    Print(L"Reading mmap....\r\n");
     //然后，我们可以去读取真实的mmap了。
     Status  = gBS->GetMemoryMap(&MemSize,MemMap,&MemMapKey,&MemMapDescSize,&MemMapDescVer);
     if (EFI_ERROR(Status))
     {
-        Print(L"Cannot read Memory map!\r\n");
+        switch (Status)
+        {
+        case EFI_BUFFER_TOO_SMALL:
+            Print(L"Buffer too small!\r\n");
+            return Status;
+        case EFI_INVALID_PARAMETER:
+            Print(L"Invalid Parameter!\r\n");
+            return Status;
+        default:
+            Print(L"Unknown Error!\r\n");
+            return Status;
+        }
+        
+    }
+    Print(L"Done!\r\n");
+    //退出启动环境。
+    Status = gBS->ExitBootServices(ImageHandle,MemMapKey);
+    if(EFI_ERROR(Status))
+    {
+        Print(L"Unable to exit boot service!\r\n");
         return Status;
     }
-    Print(L"Got memory map of %d bytes.\r\n",MemSize);
-    //退出启动环境。
-    gBS->ExitBootServices(ImageHandle,MemMapKey);
     //Ugly!
     typedef struct {
     /*void *xdsp_address;
@@ -113,5 +135,10 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     Print(L"Loading Kernel...\r\n");
     KernelInfo info = {.gop = GraphicsProtocol};
     ((KernelMainFunc)KernelEntry)(info);
+    Print(L"Unable to successfully exit boot services. Last status: %d\n",
+        Status);
+    gBS->FreePool(MemMap);
+
+  return EFI_ABORTED;
     return EFI_SUCCESS;
 }
