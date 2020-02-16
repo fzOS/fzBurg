@@ -1,14 +1,13 @@
 [Defines]
  INF_VERSION = 0x00010005
- BASE_NAME = FzBurgHelloWorld
- FILE_GUID = 0CA4812E-1E5C-423F-B6EB-42A61DFFC9B0
+ BASE_NAME = FzBurgMain
+ FILE_GUID = 99BA5433-DF5F-A898-C8E0-78B8BA55F251
  MODULE_TYPE = UEFI_APPLICATION
  VERSION_STRING = 0.01
  ENTRY_POINT = UefiMain
 [Sources]
-  FzBurgHelloWorld.c
-  ../libeg/load_bmp.c
-
+  entry.c
+  elf.c
 [Packages]
  MdePkg/MdePkg.dec
 [Protocols]  
@@ -19,4 +18,4 @@
 [LibraryClasses]
   UefiApplicationEntryPoint
   UefiLib
-  SafeIntLib
+  BaseMemoryLib

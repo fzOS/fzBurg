@@ -1,6 +1,9 @@
 #include <Uefi.h>
 #include <Library/UefiLib.h>
+#include <Library/SafeIntLib.h>
 #include <Protocol/GraphicsOutput.h>
+#include <Guid/FileInfo.h>
+#include "../libeg/libegint.h"
 EFI_GRAPHICS_OUTPUT_PROTOCOL* GraphicsProtocol;
 EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* FileSystemProtocol;
 extern EFI_BOOT_SERVICES *gBS;
@@ -24,9 +27,6 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     ScreenWidth += 0;
     ScreenHeight += 0;
     Print(L"According to the GOP,the current Graphics resolution is %d * %d\n",ScreenWidth,ScreenHeight);
-
-    // EFI_GRAPHICS_OUTPUT_BLT_PIXEL BltBuffer[1] = {{0xCC,0xCC,0x75,0}};
-    // GraphicsProtocol->Blt(GraphicsProtocol,BltBuffer,EfiBltVideoFill,0,0,0,0,ScreenWidth,ScreenHeight,0);
     Status = gBS->LocateProtocol(&gEfiSimpleFileSystemProtocolGuid,NULL,(VOID**)&FileSystemProtocol);
     if(EFI_ERROR(Status))
     {
@@ -46,6 +46,47 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
         SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot found bg.bmp.Stop.\r\n");
         return Status;
     }
-    Print(L"File is ready.\r\n");
+    UINTN BgFileSize = 0;
+    EFI_FILE_INFO* BgFileInfo;
+    Status = Bg->GetInfo(Bg,&gEfiFileInfoGuid,&BgFileSize,(VOID**)BgFileInfo);
+    if(Status == EFI_BUFFER_TOO_SMALL) {
+        Status = gBS->AllocatePool(EfiBootServicesData, BgFileSize, (VOID**)&BgFileInfo);
+        Bg->GetInfo(Bg,&gEfiFileInfoGuid,&BgFileSize,(VOID**)BgFileInfo);
+    }
+    Print(L"The background image file size is going to be %d bytes.\r\n",BgFileInfo->FileSize);
+    VOID* BgFile;
+    Status = gBS->AllocatePool(EfiBootServicesData, BgFileInfo->FileSize, &BgFile);
+    if(EFI_ERROR(Status))
+    {
+        SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot allocate pool.Stop.\r\n");
+        return Status;
+    }
+    BgFileSize = BgFileInfo->FileSize;
+    Print(L"Reading BMP file......\r\n");
+    Status = Bg->Read(Bg,&BgFileSize,BgFile);
+    if(EFI_ERROR(Status))
+    {
+        SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot read BMP file.Stop.\r\n");
+        return Status;
+    }
+    Print(L"Converting BMP to Blt format......\r\n");
+    EG_IMAGE* image = egDecodeBMP((UINT8*)BgFile,BgFileSize,0,FALSE);
+    Print(L"Calling Blt......\r\n");
+    Status = GraphicsProtocol->Blt(GraphicsProtocol,(EFI_GRAPHICS_OUTPUT_BLT_PIXEL*)(image->PixelData),EfiBltBufferToVideo,0,0,0,0,image->Width,image->Height,0);
+    //EFI_GRAPHICS_OUTPUT_BLT_PIXEL* GopBlt;
+    //UINTN GopBltSize, PixelHeight, PixelWidth;
+    // //Status = ConvertBmpToGopBlt(BgFile,BgFileSize,&GopBlt,&GopBltSize,&PixelHeight,&PixelWidth);
+    // if(EFI_ERROR(Status))
+    // {
+    //     SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot convert BMP file into Blt.Stop.\r\n");
+    //     return Status;
+    // }
+    // Print(L"The converted resolution is %d * %d,with %d bytes per pixel.\r\n",PixelWidth,PixelHeight,GopBltSize/PixelHeight/PixelWidth);
+    // Print(L"Calling Blt......\r\n");
+    // UINTN CoordinateX = (UINTN) (GraphicsProtocol->Mode->Info->HorizontalResolution / 2) - (PixelWidth / 2);
+	// 	UINTN CoordinateY = (UINTN) (GraphicsProtocol->Mode->Info->VerticalResolution / 2) - (PixelHeight / 2);
+    // Status = GraphicsProtocol->Blt(GraphicsProtocol,GopBlt,EfiBltBufferToVideo,0,0,CoordinateX,CoordinateY,PixelWidth,PixelHeight,0);
+    gBS->FreePool(BgFile);
+    gBS->FreePool(BgFileInfo);
     return EFI_SUCCESS;
 }
