@@ -1,0 +1,60 @@
+#include "uefilibs.h"
+#include "fileops.h"
+struct {
+  EFI_LOADED_IMAGE *loaded_image;
+} fops_data;
+
+void fops_init(EFI_HANDLE image_handle) {
+  EFI_GUID loaded_image_protocol_guid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
+  EFI_STATUS status = uefi_call_wrapper(BS->HandleProtocol, 3, image_handle, &loaded_image_protocol_guid, (VOID **) &fops_data.loaded_image);
+
+  if (EFI_ERROR(status)) {
+    Print(L"fops_init() error: %d\n", status);
+  }
+}
+
+EFI_FILE * fops_open_root() {
+  return LibOpenRoot(fops_data.loaded_image->DeviceHandle);
+}
+
+EFI_FILE * fops_open_file(EFI_FILE *root_dir, CHAR16 *filename, U64 mode, U64 attributes) {
+  EFI_STATUS status = uefi_call_wrapper(root_dir->Open, 5, root_dir, &root_dir, filename, mode, attributes);
+
+  if (status == EFI_SUCCESS) {
+    return root_dir;
+  } else {
+    Print(L"fops_open_file() error: %d\n", status);
+    return NULL;
+  }
+}
+
+UINTN fops_file_size(EFI_FILE *file) {
+  char file_info_buffer[SIZE_OF_EFI_FILE_INFO * 2]; // We don't now how big this needs to be, hopefully this big
+  EFI_FILE_INFO *file_info_ptr = (EFI_FILE_INFO *)&file_info_buffer;
+  UINTN info_buffer_size = sizeof(file_info_buffer);
+  EFI_GUID file_info_guid = EFI_FILE_INFO_ID;
+
+  EFI_STATUS status = uefi_call_wrapper(file->GetInfo, 4, file, &file_info_guid, &info_buffer_size, file_info_ptr);
+
+  if (status == EFI_SUCCESS) {
+    return file_info_ptr->FileSize;
+  } else {
+    Print(L"fops_file_size() error: %d\n", status);
+    return -1;
+  }
+}
+
+UINTN fops_file_read(EFI_FILE *file, UINTN length, OUT void *buffer) {
+  EFI_STATUS status = uefi_call_wrapper(file->Read, 3, file, &length, buffer);
+
+  if (status == EFI_SUCCESS) {
+    return length;
+  } else {
+    Print(L"fops_file_read() error: %d\n", status);
+    return 0;
+  }
+}
+
+void fops_file_close(EFI_FILE *file) {
+  uefi_call_wrapper(file->Close, 1, file);
+}

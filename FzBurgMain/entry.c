@@ -1,6 +1,7 @@
 #include "public.h"
 #include "elf.h"
 extern EFI_BOOT_SERVICES* gBS;
+extern EFI_RUNTIME_SERVICES* gRT;
 EFI_STATUS
 EFIAPI
 UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
@@ -10,6 +11,7 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     EFI_STATUS Status;
     EFI_FILE_PROTOCOL* Root;
     Status = gBS->LocateProtocol(&gEfiGraphicsOutputProtocolGuid,NULL,(VOID**) &GraphicsProtocol);
+    GraphicsProtocol->SetMode(GraphicsProtocol,GraphicsProtocol->Mode->MaxMode);
     if(EFI_ERROR(Status))
     {
         SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Failed to get GOP.Stop.\r\n");
@@ -34,10 +36,12 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
         SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot found kernel.Stop.\r\n");
         return Status;
     }
+    SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Found kernel.\r\n");
     UINTN KernelFileSize = 0;
     EFI_FILE_INFO* KernelFileInfo;
     Status = KernelFile->GetInfo(KernelFile,&gEfiFileInfoGuid,&KernelFileSize,(VOID*)KernelFileInfo);
     if(Status == EFI_BUFFER_TOO_SMALL) {
+        Print(L"Buffer Too Small!The buffer is going to be %d bytes.\r\n",KernelFileSize);
         Status = gBS->AllocatePool(EfiLoaderData, KernelFileSize, (VOID**)&KernelFileInfo);
         KernelFile->GetInfo(KernelFile,&gEfiFileInfoGuid,&KernelFileSize,(VOID*)KernelFileInfo);
     }
@@ -70,10 +74,10 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     {
         Print(L"Successfully loaded kernel at 0x%llx\r\n",KernelEntry);
     }
-    gBS->FreePool(KernelFileInfo);
-    KernelFileInfo = NULL;
-    gBS->FreePool(KernelFileBuffer);
-    KernelFileBuffer = NULL;
+    //gBS->FreePool(KernelFileInfo);
+    //KernelFileInfo = NULL;
+    //gBS->FreePool(KernelFileBuffer);
+    //KernelFileBuffer = NULL;
     //获取mmap.
     UINTN MemSize = 0, MemMapKey = 0, MemMapDescSize = 0;
     UINT32 MemMapDescVer =0;
@@ -113,32 +117,33 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
         }
         
     }
-    Print(L"Done!\r\n");
-    //退出启动环境。
-    Status = gBS->ExitBootServices(ImageHandle,MemMapKey);
-    if(EFI_ERROR(Status))
-    {
-        Print(L"Unable to exit boot service!\r\n");
-        return Status;
-    }
-    //Ugly!
-    typedef struct {
-    /*void *xdsp_address;
-    uint8_t *memory_map;
+     typedef struct {
+    void *xdsp_address;
+    UINT8 *memory_map;
     uint64_t mem_map_size;
     uint64_t mem_map_descriptor_size;
     uint64_t kernel_lowest_address;
-    uint64_t kernel_page_count;*/
+    uint64_t kernel_page_count;
     EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
     } KernelInfo;
     typedef void (*KernelMainFunc)(KernelInfo);
-    Print(L"Loading Kernel...\r\n");
-    KernelInfo info = {.gop = GraphicsProtocol};
-    ((KernelMainFunc)KernelEntry)(info);
-    Print(L"Unable to successfully exit boot services. Last status: %d\n",
-        Status);
-    gBS->FreePool(MemMap);
+    KernelInfo info = {
+                         .memory_map = (UINT8*)MemMap,
+                         .mem_map_size = MemSize,
+                         .mem_map_descriptor_size = MemMapDescSize,
+        .gop = GraphicsProtocol};
+    Status = gBS->ExitBootServices(ImageHandle,MemMapKey);
+    if(EFI_ERROR(Status))
+    {
+        Print(L"Unable to exit boot service! the result is:%d\r\n",Status);
+        return Status;
+    }
+    //gRT->ResetSystem(EfiResetWarm,EFI_TIMEOUT,0,NULL);
+    //Ugly!
 
-  return EFI_ABORTED;
+    ((KernelMainFunc)KernelEntry)(info);
+    // Print(L"Unable to successfully exit boot services. Last status: %d\n",
+    //     Status);
+    // gBS->FreePool(MemMap);
     return EFI_SUCCESS;
 }
