@@ -64,7 +64,8 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     }
     Print(L"Parsing ELF format......\r\n");
     VOID* KernelEntry = NULL;
-    Status = LoadKernel(KernelFileBuffer,&KernelEntry);
+    UINTN KenrelLoadAddress,KenrelPageCount;
+    Status = LoadKernel(KernelFileBuffer,&KernelEntry,&KenrelLoadAddress,&KenrelPageCount);
     if(EFI_ERROR(Status))
     {
         SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot parse kernel.\r\n");
@@ -74,10 +75,26 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     {
         Print(L"Successfully loaded kernel at 0x%llx\r\n",KernelEntry);
     }
-    //gBS->FreePool(KernelFileInfo);
-    //KernelFileInfo = NULL;
-    //gBS->FreePool(KernelFileBuffer);
-    //KernelFileBuffer = NULL;
+    gBS->FreePool(KernelFileInfo);
+    KernelFileInfo = NULL;
+    gBS->FreePool(KernelFileBuffer);
+    KernelFileBuffer = NULL;
+    //找到ACPI RSDP.
+    VOID* RsdpAddress=NULL;
+    EFI_CONFIGURATION_TABLE* C=SystemTable->ConfigurationTable;
+    for (int Index = 0; Index < SystemTable->NumberOfTableEntries; Index++) {
+        EFI_GUID Table_Guid = C->VendorGuid;
+        if(!(CompareMem(&Table_Guid,&gEfiAcpiTableGuid,sizeof(EFI_GUID))))
+         {
+            RsdpAddress = C->VendorTable;
+         }
+         C++;
+    }
+    if(RsdpAddress==NULL)
+    {
+        Print(L"Cannot found ACPI Table.Stop.\r\n");
+        return EFI_UNSUPPORTED;
+    }
     //获取mmap.
     UINTN MemSize = 0, MemMapKey = 0, MemMapDescSize = 0;
     UINT32 MemMapDescVer =0;
@@ -103,35 +120,28 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     Status  = gBS->GetMemoryMap(&MemSize,MemMap,&MemMapKey,&MemMapDescSize,&MemMapDescVer);
     if (EFI_ERROR(Status))
     {
-        switch (Status)
-        {
-        case EFI_BUFFER_TOO_SMALL:
-            Print(L"Buffer too small!\r\n");
-            return Status;
-        case EFI_INVALID_PARAMETER:
-            Print(L"Invalid Parameter!\r\n");
-            return Status;
-        default:
-            Print(L"Unknown Error!\r\n");
-            return Status;
-        }
-        
+        SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot get memmap.stop.\r\n");        
     }
-     typedef struct {
-    void *xdsp_address;
-    UINT8 *memory_map;
-    uint64_t mem_map_size;
-    uint64_t mem_map_descriptor_size;
-    uint64_t kernel_lowest_address;
-    uint64_t kernel_page_count;
-    EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
+    typedef struct {
+        void *rsdp_address;
+        UINT8 *memory_map;
+        uint64_t mem_map_size;
+        uint64_t mem_map_descriptor_size;
+        uint64_t kernel_lowest_address;
+        uint64_t kernel_page_count;
+        EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
     } KernelInfo;
     typedef void (*KernelMainFunc)(KernelInfo);
-    KernelInfo info = {
-                         .memory_map = (UINT8*)MemMap,
-                         .mem_map_size = MemSize,
-                         .mem_map_descriptor_size = MemMapDescSize,
-        .gop = GraphicsProtocol};
+    KernelInfo info = 
+    {
+        .rsdp_address = RsdpAddress,
+        .memory_map = (UINT8*)MemMap,
+        .mem_map_size = MemSize,
+        .mem_map_descriptor_size = MemMapDescSize,
+        .kernel_lowest_address = KenrelLoadAddress,
+        .kernel_page_count = KenrelPageCount,
+        .gop = GraphicsProtocol
+    };
     Status = gBS->ExitBootServices(ImageHandle,MemMapKey);
     if(EFI_ERROR(Status))
     {
@@ -142,8 +152,8 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     //Ugly!
 
     ((KernelMainFunc)KernelEntry)(info);
-    // Print(L"Unable to successfully exit boot services. Last status: %d\n",
-    //     Status);
-    // gBS->FreePool(MemMap);
+    Print(L"Unable to successfully exit boot services. Last status: %d\n",
+        Status);
+    gBS->FreePool(MemMap);
     return EFI_SUCCESS;
 }

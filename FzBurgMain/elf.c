@@ -1,7 +1,7 @@
 #include "elf.h"
 #include "public.h"
 extern EFI_BOOT_SERVICES* gBS;
-EFI_STATUS LoadKernel(VOID* File,void **entry_address)
+EFI_STATUS LoadKernel(VOID* File,void **entry_address,UINTN* KernelLoadAddress,UINTN* KernelPageCount)
 {
     //首先，检查它是否是一个ELF文件。
     Elf64_Ehdr* Header = (Elf64_Ehdr*) File;
@@ -16,7 +16,6 @@ EFI_STATUS LoadKernel(VOID* File,void **entry_address)
     if (Header->e_machine != 62) 
         return EFI_UNSUPPORTED;
     Elf64_Phdr *program_headers = (Elf64_Phdr *)((char*)File + Header->e_phoff);
-    //以下是抄来的代码。
     Elf64_Addr highest_addr_found = 0;
     Elf64_Addr lowest_addr_found = -1;
     for (int i = 0; i < Header->e_phnum; ++i) {
@@ -30,7 +29,6 @@ EFI_STATUS LoadKernel(VOID* File,void **entry_address)
     int num_pages_needed = (bytes_needed / EFI_PAGE_SIZE) + 1;
     EFI_PHYSICAL_ADDRESS region = lowest_addr_found;
     EFI_STATUS Status;
-    //以上。
     Status = gBS->AllocatePages(AllocateAddress, EfiLoaderData, num_pages_needed, &region);
     if(EFI_ERROR(Status)|| region != lowest_addr_found)
     {
@@ -48,5 +46,7 @@ EFI_STATUS LoadKernel(VOID* File,void **entry_address)
         }
     }
     *entry_address = (void *)Header->e_entry;
+    *KernelLoadAddress = region;
+    *KernelPageCount = num_pages_needed;
     return EFI_SUCCESS;
 }
