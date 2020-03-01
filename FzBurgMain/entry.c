@@ -1,5 +1,6 @@
 #include "public.h"
 #include "elf.h"
+#include "bmp.h"
 extern EFI_BOOT_SERVICES* gBS;
 extern EFI_RUNTIME_SERVICES* gRT;
 EFI_STATUS
@@ -10,8 +11,10 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* FileSystemProtocol;
     EFI_STATUS Status;
     EFI_FILE_PROTOCOL* Root;
+    EFI_EVENT Events[2];
     Status = gBS->LocateProtocol(&gEfiGraphicsOutputProtocolGuid,NULL,(VOID**) &GraphicsProtocol);
     GraphicsProtocol->SetMode(GraphicsProtocol,GraphicsProtocol->Mode->MaxMode);
+    SystemTable->ConOut->ClearScreen(SystemTable->ConOut);
     if(EFI_ERROR(Status))
     {
         SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Failed to get GOP.Stop.\r\n");
@@ -28,6 +31,61 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     {
         SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot open root.Stop.\r\n");
         return Status;
+    }
+    EFI_FILE_PROTOCOL* BgFile;
+    Status = Root->Open(Root,&BgFile,L"bg.bmp",EFI_FILE_MODE_READ,EFI_FILE_READ_ONLY);
+    if(EFI_ERROR(Status))
+    {
+        SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot found BG file.Stop.\r\n");
+        return Status;
+    }
+    UINTN BgFileSize = 0;
+    EFI_FILE_INFO* BgFileInfo;
+    Status = BgFile->GetInfo(BgFile,&gEfiFileInfoGuid,&BgFileSize,(VOID*)BgFileInfo);
+    if(Status == EFI_BUFFER_TOO_SMALL) {
+        Status = gBS->AllocatePool(EfiLoaderData, BgFileSize, (VOID**)&BgFileInfo);
+        BgFile->GetInfo(BgFile,&gEfiFileInfoGuid,&BgFileSize,(VOID*)BgFileInfo);
+    }
+    BgFileSize = BgFileInfo->FileSize;
+    VOID* BgFileBuffer;
+    Status = gBS->AllocatePool(EfiLoaderData, BgFileInfo->FileSize, &BgFileBuffer);
+    if(EFI_ERROR(Status))
+    {
+        SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot allocate pool.Stop.\r\n");
+        return Status;
+    }
+    UINTN PrevFileSize = BgFileSize;
+    Status = BgFile->Read(BgFile,&BgFileSize,BgFileBuffer);
+    if(EFI_ERROR(Status)||PrevFileSize!=BgFileSize)
+    {
+        SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot read BG file.Stop.\r\n");
+        return Status;
+    }
+    DisplayImage(GraphicsProtocol,BgFileBuffer);
+    //在此处加入监听用户的键盘(此处设置回车键为触发按键。)
+    SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Press Return to continue boot.\r\n");
+    while(1)
+    {
+        EFI_INPUT_KEY key={0,0};
+        UINTN index=0;
+        SystemTable->ConIn->Reset(SystemTable->ConIn,FALSE);
+        Events[0] = SystemTable->ConIn->WaitForKey;
+        Status = gBS->WaitForEvent(1,Events,&index);
+        if(EFI_ERROR(Status))
+        {
+            SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot bind key event.Stop.\r\n");
+            return EFI_UNSUPPORTED;
+        }
+        Status = SystemTable->ConIn->ReadKeyStroke(SystemTable->ConIn,&key);
+        if(EFI_ERROR(Status))
+        {
+            Print(L"Read Key returned with value %d\n",Status);
+        }
+        if(key.UnicodeChar==CHAR_CARRIAGE_RETURN)
+        {
+            SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Continuing boot.\r\n");
+            break;
+        }
     }
     EFI_FILE_PROTOCOL* KernelFile;
     Status = Root->Open(Root,&KernelFile,L"kernel",EFI_FILE_MODE_READ,EFI_FILE_READ_ONLY);
@@ -55,7 +113,7 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
         return Status;
     }
     Print(L"Loading kernel file......\r\n");
-    UINTN PrevFileSize = KernelFileSize;
+    PrevFileSize = KernelFileSize;
     Status = KernelFile->Read(KernelFile,&KernelFileSize,KernelFileBuffer);
     if(EFI_ERROR(Status)||PrevFileSize!=KernelFileSize)
     {

@@ -8,6 +8,7 @@
 [Sources]
   entry.c
   elf.c
+  bmp.c
 [Packages]
  MdePkg/MdePkg.dec
 [Protocols]  
@@ -20,3 +21,4 @@
   UefiApplicationEntryPoint
   UefiLib
   BaseMemoryLib
+  MemoryAllocationLib

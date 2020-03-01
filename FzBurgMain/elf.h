@@ -39,4 +39,4 @@ typedef struct
 } __attribute__((packed)) Elf64_Phdr;
 
 #endif
-EFI_STATUS LoadKernel(VOID* File,void **entry_address,UINTN* KernelLoadAddress,UINTN* KernelPageCount);
+EFI_STATUS LoadKernel(void* File,void **entry_address,UINTN* KernelLoadAddress,UINTN* KernelPageCount);
