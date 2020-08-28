@@ -11,7 +11,9 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* FileSystemProtocol;
     EFI_STATUS Status;
     EFI_FILE_PROTOCOL* Root;
+    #ifndef FzOS_QUICK_BOOT
     EFI_EVENT Events[2];
+    #endif
     Status = gBS->LocateProtocol(&gEfiGraphicsOutputProtocolGuid,NULL,(VOID**) &GraphicsProtocol);
     GraphicsProtocol->SetMode(GraphicsProtocol,GraphicsProtocol->Mode->MaxMode);
     SystemTable->ConOut->ClearScreen(SystemTable->ConOut);
@@ -62,6 +64,21 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
         return Status;
     }
     DisplayImage(GraphicsProtocol,BgFileBuffer);
+    //将地址重新映射到0xFFFF800000000000.（保留原始的地址）
+    EFI_PHYSICAL_ADDRESS pml4e=0;
+    __asm__ volatile ("movq %%cr3,%0":"=g"(pml4e)::);
+    pml4e &=0x000FFFFFFFFFF000ULL;
+    Print(L"PML4E is:%x\n",pml4e);
+    EFI_PHYSICAL_ADDRESS fake_pml4e;
+    gBS->AllocatePages(AllocateAnyPages,EfiRuntimeServicesData,1,&fake_pml4e);
+    Print(L"Our Fake PML4E is at:%x\n",fake_pml4e);
+    CopyMem((void*)fake_pml4e,(void*)pml4e,4096);
+    CopyMem((void*)fake_pml4e+256*sizeof(UINTN),(void*)fake_pml4e,sizeof(UINTN));
+    pml4e &=~(0x000FFFFFFFFFF000ULL);
+    pml4e |= fake_pml4e;
+    __asm__ volatile ("movq %0,%%cr3"::"l"(pml4e):);    
+    Print(L"Pulling kernel to upper space done.\n");
+    #ifndef FzOS_QUICK_BOOT
     //在此处加入监听用户的键盘(此处设置回车键为触发按键。)
     SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Press Return to continue boot.\r\n");
     while(1)
@@ -87,6 +104,7 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
             break;
         }
     }
+    #endif
     EFI_FILE_PROTOCOL* KernelFile;
     Status = Root->Open(Root,&KernelFile,L"kernel",EFI_FILE_MODE_READ,EFI_FILE_READ_ONLY);
     if(EFI_ERROR(Status))
@@ -132,6 +150,7 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     if(KernelEntry != NULL)
     {
         Print(L"Successfully loaded kernel at 0x%llx\r\n",KernelEntry);
+        (KernelEntry) = (VOID*)(((UINTN)KernelEntry)|0xFFFF800000000000ULL);
     }
     gBS->FreePool(KernelFileInfo);
     KernelFileInfo = NULL;
@@ -192,13 +211,13 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     typedef void (*KernelMainFunc)(KernelInfo);
     KernelInfo info = 
     {
-        .rsdp_address = RsdpAddress,
-        .memory_map = (UINT8*)MemMap,
+        .rsdp_address = RsdpAddress+0xFFFF800000000000ULL,
+        .memory_map = (UINT8*)((UINTN)MemMap+0xFFFF800000000000ULL),
         .mem_map_size = MemSize,
         .mem_map_descriptor_size = MemMapDescSize,
         .kernel_lowest_address = KenrelLoadAddress,
         .kernel_page_count = KenrelPageCount,
-        .gop = GraphicsProtocol
+        .gop = (EFI_GRAPHICS_OUTPUT_PROTOCOL*)((UINTN)GraphicsProtocol+0xFFFF800000000000ULL)
     };
     Status = gBS->ExitBootServices(ImageHandle,MemMapKey);
     if(EFI_ERROR(Status))
@@ -206,12 +225,24 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
         Print(L"Unable to exit boot service! the result is:%d\r\n",Status);
         return Status;
     }
+    typedef struct {
+        UINTN Type; //和标准不符？？？
+        UINTN PhysicalStart;
+        UINTN VirtualStart;
+        UINTN NumberOfPages;
+        UINTN Attribute;
+        UINTN StrangePadding;
+    } memmap;
+    for(int i=0;i<MemSize/MemMapDescSize;i++) {
+        (((memmap*)MemMap)+i)->VirtualStart = (((memmap*)MemMap)+i)->PhysicalStart | 0xFFFF800000000000ULL;
+    }
+    Status = gRT->SetVirtualAddressMap(MemSize,MemMapDescSize,MemMapDescVer,MemMap);
+    if(EFI_ERROR(Status)) {
+        gRT->ResetSystem(EfiResetWarm,EFI_TIMEOUT,0,NULL);
+    }
     //gRT->ResetSystem(EfiResetWarm,EFI_TIMEOUT,0,NULL);
     //Ugly!
-
     ((KernelMainFunc)KernelEntry)(info);
-    Print(L"Unable to successfully exit boot services. Last status: %d\n",
-        Status);
     gBS->FreePool(MemMap);
     return EFI_SUCCESS;
 }
