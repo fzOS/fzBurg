@@ -19,7 +19,7 @@
 
 [BuildOptions]
   GCC:RELEASE_*_*_CC_FLAGS             = -DMDEPKG_NDEBUG
-
+  GCC:*_*_*_CC_FLAGS                   = -DFzOS_QUICK_BOOT #in case U want quick boot.
 [LibraryClasses]
   #
   # Entry Point Libraries

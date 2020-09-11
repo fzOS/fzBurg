@@ -3,6 +3,11 @@
 #include "bmp.h"
 extern EFI_BOOT_SERVICES* gBS;
 extern EFI_RUNTIME_SERVICES* gRT;
+
+#ifdef FzOS_QUICK_BOOT
+#pragma message("You chose Quick boot.")
+#endif
+
 EFI_STATUS
 EFIAPI
 UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
@@ -207,6 +212,7 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
         uint64_t kernel_lowest_address;
         uint64_t kernel_page_count;
         EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
+        EFI_RUNTIME_SERVICES *rt;
     } KernelInfo;
     typedef void (*KernelMainFunc)(KernelInfo);
     KernelInfo info = 
@@ -217,7 +223,8 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
         .mem_map_descriptor_size = MemMapDescSize,
         .kernel_lowest_address = KenrelLoadAddress,
         .kernel_page_count = KenrelPageCount,
-        .gop = (EFI_GRAPHICS_OUTPUT_PROTOCOL*)((UINTN)GraphicsProtocol+0xFFFF800000000000ULL)
+        .gop = (EFI_GRAPHICS_OUTPUT_PROTOCOL*)((UINTN)GraphicsProtocol+0xFFFF800000000000ULL),
+        .rt = gRT
     };
     Status = gBS->ExitBootServices(ImageHandle,MemMapKey);
     if(EFI_ERROR(Status))
@@ -240,7 +247,7 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     if(EFI_ERROR(Status)) {
         gRT->ResetSystem(EfiResetWarm,EFI_TIMEOUT,0,NULL);
     }
-    //gRT->ResetSystem(EfiResetWarm,EFI_TIMEOUT,0,NULL);
+
     //Ugly!
     ((KernelMainFunc)KernelEntry)(info);
     gBS->FreePool(MemMap);
