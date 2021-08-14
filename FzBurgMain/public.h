@@ -9,4 +9,6 @@
 #include <Guid/Acpi.h>
 #include <Library/BaseMemoryLib.h>
 #include <IndustryStandard/Bmp.h>
+
+#define KERNEL_STACK_PAGES 4
 #endif

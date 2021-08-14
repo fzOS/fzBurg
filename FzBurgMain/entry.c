@@ -157,6 +157,11 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
         Print(L"Successfully loaded kernel at 0x%llx\r\n",KernelEntry);
         (KernelEntry) = (VOID*)(((UINTN)KernelEntry)|0xFFFF800000000000ULL);
     }
+        
+    //分配2页的内核栈。
+    uint64_t new_empty_stack = 0ULL;
+    gBS->AllocatePages(AllocateAnyPages,EfiRuntimeServicesData,KERNEL_STACK_PAGES,&new_empty_stack);
+    
     gBS->FreePool(KernelFileInfo);
     KernelFileInfo = NULL;
     gBS->FreePool(KernelFileBuffer);
@@ -213,6 +218,7 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
         uint64_t kernel_page_count;
         EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
         EFI_RUNTIME_SERVICES *rt;
+        uint64_t new_empty_stack;
     } KernelInfo;
     typedef void (*KernelMainFunc)(KernelInfo);
     KernelInfo info = 
@@ -224,7 +230,8 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
         .kernel_lowest_address = KenrelLoadAddress,
         .kernel_page_count = KenrelPageCount,
         .gop = (EFI_GRAPHICS_OUTPUT_PROTOCOL*)((UINTN)GraphicsProtocol+0xFFFF800000000000ULL),
-        .rt = gRT
+        .rt = gRT,
+        .new_empty_stack = new_empty_stack
     };
     Status = gBS->ExitBootServices(ImageHandle,MemMapKey);
     if(EFI_ERROR(Status))
