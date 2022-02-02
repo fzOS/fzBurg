@@ -7,7 +7,6 @@ extern EFI_RUNTIME_SERVICES* gRT;
 #ifdef FzOS_QUICK_BOOT
 #pragma message("You chose Quick boot.")
 #endif
-
 EFI_STATUS
 EFIAPI
 UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
@@ -73,19 +72,56 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     EFI_PHYSICAL_ADDRESS pml4e=0;
     __asm__ volatile ("movq %%cr3,%0":"=g"(pml4e)::);
     pml4e &=0x000FFFFFFFFFF000ULL;
-    Print(L"PML4E is:%x\n",pml4e);
     EFI_PHYSICAL_ADDRESS fake_pml4e;
     gBS->AllocatePages(AllocateAnyPages,EfiRuntimeServicesData,1,&fake_pml4e);
-    Print(L"Our Fake PML4E is at:%x\n",fake_pml4e);
     CopyMem((void*)fake_pml4e,(void*)pml4e,4096);
     CopyMem((void*)fake_pml4e+256*sizeof(UINTN),(void*)fake_pml4e,sizeof(UINTN));
     pml4e &=~(0x000FFFFFFFFFF000ULL);
     pml4e |= fake_pml4e;
     __asm__ volatile ("movq %0,%%cr3"::"l"(pml4e):);    
-    Print(L"Pulling kernel to upper space done.\n");
+    Print(L"Pulling kernel to upper space done.\r\n");
+    UINT32 Attrs;
+    UINTN  DataSize=0;
+    CHAR16* Buffer;
+    //输出变量。
+    Status = gRT->GetVariable (
+                  L"BootParameters",
+                  &gFzosBootArgumentGuid,
+                  &Attrs,
+                  &DataSize,
+                  Buffer);
+    if(Status == EFI_BUFFER_TOO_SMALL) {
+        Status = gBS->AllocatePool(EfiBootServicesData,DataSize+1,(VOID**)&Buffer);
+        if(EFI_ERROR(Status)) {
+            SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot read EFI Variable.Stop.\r\n");
+            return Status;
+        }
+        ZeroMem(Buffer,DataSize+1);
+        if(Buffer==NULL) {
+            SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot read EFI Variable.Stop.\r\n");
+            return Status;
+        }
+        Status = gRT->GetVariable (
+                  L"BootParameters",
+                  &gFzosBootArgumentGuid,
+                  &Attrs,
+                  &DataSize,
+                  Buffer);
+        if(EFI_ERROR(Status)) {
+            SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot read EFI Variable.Stop.\r\n");
+            return Status;
+        }
+        Print(L"Boot Variable:");
+        AsciiPrint((CHAR8*)Buffer);
+        Print(L"\r\n");
+    }
+    else {
+        SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Cannot read EFI Variable.Stop.\r\n");
+        return Status;
+    }
     #ifndef FzOS_QUICK_BOOT
     //在此处加入监听用户的键盘(此处设置回车键为触发按键。)
-    SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Press Return to continue boot.\r\n");
+    SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Press <Return> to continue boot, <Tab> to modify boot parameters.\r\n");
     while(1)
     {
         EFI_INPUT_KEY key={0,0};
@@ -106,6 +142,18 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
         if(key.UnicodeChar==CHAR_CARRIAGE_RETURN)
         {
             SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Continuing boot.\r\n");
+            break;
+        }
+        if(key.UnicodeChar==CHAR_TAB)
+        {
+            SystemTable->ConOut->OutputString(SystemTable->ConOut,L"Input new parameter,<Return> to proceed.\r\n");
+            //FIXME:STUB!
+            while(key.UnicodeChar!=CHAR_CARRIAGE_RETURN) {
+                SystemTable->ConIn->ReadKeyStroke(SystemTable->ConIn,&key);
+                if(key.UnicodeChar!=0x00) {
+                    Print(L"%c",key.UnicodeChar);
+                }
+            }
             break;
         }
     }
@@ -260,3 +308,9 @@ UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     gBS->FreePool(MemMap);
     return EFI_SUCCESS;
 }
+EFI_GUID gFzosBootArgumentGuid = {
+    .Data1 = 0x1234ABCD,
+    .Data2 = 0xBEEF,
+    .Data3 = 0xBABE,
+    .Data4 = {0x23,0x33,0x88,0x88,0x88,0x88,0x88,0x88}
+};

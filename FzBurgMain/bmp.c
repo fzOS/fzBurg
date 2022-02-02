@@ -19,7 +19,7 @@ DisplayImage( EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop,
     Pixels = BmpHeader->PixelWidth * BmpHeader->PixelHeight;
     BltBuffer = AllocateZeroPool( sizeof(EFI_GRAPHICS_OUTPUT_BLT_PIXEL) * Pixels);
     if (BltBuffer == NULL) {
-        Print(L"ERROR: BltBuffer. No memory resources\n");
+        Print(L"ERROR: BltBuffer. No memory resources\r\n");
         return EFI_OUT_OF_RESOURCES;
     }
 
@@ -37,13 +37,18 @@ DisplayImage( EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop,
             // BltBuffer[BltPos].Reserved = (UINT8) BitFieldRead32(Palette[BitmapData[Pos]], 24, 31);
         }
     }
-
-
+    EFI_GRAPHICS_OUTPUT_MODE_INFORMATION   * GopInfo = (Gop->Mode->Info);
+    INTN OffsetX = (GopInfo->HorizontalResolution-BmpHeader->PixelWidth)>=0?\
+                    (GopInfo->HorizontalResolution-BmpHeader->PixelWidth)/2:\
+                    0;
+    INTN OffsetY = (GopInfo->VerticalResolution-BmpHeader->PixelHeight)>=0?\
+                    (GopInfo->VerticalResolution-BmpHeader->PixelHeight)/2:\
+                    0;
     Status = Gop->Blt( Gop,
                        BltBuffer,
                        EfiBltBufferToVideo,
                        0, 0,            /* Source X, Y */
-                       0, 0,          /* Dest X, Y */
+                       OffsetX, OffsetY,          /* Dest X, Y */
                        BmpHeader->PixelWidth, BmpHeader->PixelHeight, 
                        0);
 

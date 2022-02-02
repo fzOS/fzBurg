@@ -4,6 +4,7 @@
 #if( !defined _M_AMD64 && !defined __amd64)
 #error "Not targeting AMD64. Abort."
 #endif
+#include <wchar.h>
 #include <X64/ProcessorBind.h>
 #include <Uefi.h>
 #include <Library/UefiLib.h>
@@ -13,6 +14,6 @@
 #include <Guid/Acpi.h>
 #include <Library/BaseMemoryLib.h>
 #include <IndustryStandard/Bmp.h>
-
+extern EFI_GUID gFzosBootArgumentGuid;
 #define KERNEL_STACK_PAGES 4
 #endif

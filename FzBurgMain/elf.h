@@ -2,6 +2,7 @@
 //本来其实是不用重新复制的，但是某人的Mac上必然不会有这个定义……
 #ifndef ELF
 #define ELF
+#include "public.h"
 #define EI_NIDENT (16)
 typedef unsigned short  uint16_t;
 typedef unsigned int  uint32_t;
@@ -37,6 +38,5 @@ typedef struct
   Elf64_Xword	p_memsz;		/* Segment size in memory */
   Elf64_Xword	p_align;		/* Segment alignment */
 } __attribute__((packed)) Elf64_Phdr;
-
-#endif
 EFI_STATUS LoadKernel(void* File,void **entry_address,UINTN* KernelLoadAddress,UINTN* KernelPageCount);
+#endif
