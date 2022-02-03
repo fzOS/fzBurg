@@ -25,6 +25,7 @@
   # Entry Point Libraries
   #
   UefiApplicationEntryPoint|MdePkg/Library/UefiApplicationEntryPoint/UefiApplicationEntryPoint.inf
+  UefiDriverEntryPoint|MdePkg/Library/UefiDriverEntryPoint/UefiDriverEntryPoint.inf
   #
   # Common Libraries
   #
@@ -43,3 +44,4 @@
 
 [Components]
   FzBurgPkg/FzBurgMain/FzBurgMain.inf
+  FzBurgPkg/FhhfsDxe/FhhfsDxe.inf
